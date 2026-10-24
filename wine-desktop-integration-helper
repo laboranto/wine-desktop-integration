@@ -1,15 +1,41 @@
 #!/usr/bin/python3
-"""xdg-desktop-portal FileChooser 로 파일 대화상자를 띄우고 결과를 --out 파일에 쓴다.
+"""wine-desktop-integration 의 유닉스 쪽 헬퍼.
+
+파일 대화상자(comdlg32.dll): xdg-desktop-portal FileChooser 로 띄우고 결과를 --out 파일에 쓴다.
 
 결과 파일(UTF-8): 1행 = 선택된 필터 번호(1부터, 모르면 0), 2행부터 경로 한 줄에 하나.
 종료코드: 0 = 선택, 10 = 취소, 그 외 = 오류(호출 측은 Wine 대화상자로 넘김).
 값 인자는 --key=값 형태로 받는다.
+
+파일 관리자(explorer.exe): show-items|show-folders <유닉스 경로>... 를 첫 인자로 주면
+org.freedesktop.FileManager1 의 ShowItems/ShowFolders 를 부른다. 종료코드 0 = 성공.
 """
 import argparse
 import os
 import secrets
 import sys
-from urllib.parse import unquote_to_bytes, urlparse
+from urllib.parse import quote_from_bytes, unquote_to_bytes, urlparse
+
+
+SHOW = {'show-items': 'ShowItems', 'show-folders': 'ShowFolders'}
+
+
+def file_uri(path):
+    """유닉스 경로 → file:// URI. argv 의 비 UTF-8 바이트(surrogateescape)도 원래 바이트로 퍼센트 인코딩"""
+    return 'file://' + quote_from_bytes(os.fsencode(path))
+
+
+def resolve(path):
+    """부모 폴더만 실제 경로로 풀어 dosdevices/c:/… 같은 콜론 경로가 파일 관리자에 안 보이게. 파일 이름은 링크여도 그대로"""
+    d, name = os.path.split(path)
+    return os.path.join(os.path.realpath(d), name)
+
+
+def show(method, paths):
+    import dbus
+    fm = dbus.SessionBus().get_object('org.freedesktop.FileManager1', '/org/freedesktop/FileManager1')
+    fm.get_dbus_method(method, 'org.freedesktop.FileManager1')([file_uri(resolve(p)) for p in paths], '', timeout=8)
+    return 0
 
 
 def main():
@@ -106,7 +132,9 @@ def main():
 
 if __name__ == '__main__':
     try:
+        if len(sys.argv) > 2 and sys.argv[1] in SHOW:
+            sys.exit(show(SHOW[sys.argv[1]], sys.argv[2:]))
         sys.exit(main())
     except Exception as e:
-        print(f'wine-portal-filedialog: {e}', file=sys.stderr)
+        print(f'wine-desktop-integration-helper: {e}', file=sys.stderr)
         sys.exit(2)

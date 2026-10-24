@@ -17,8 +17,8 @@ static DWORD g_err;
 
 typedef BOOL (WINAPI *ofn_fn)(OPENFILENAMEW *);
 
-/* install.sh 가 "우리 DLL" 인지 판별하는 표지 */
-__attribute__((used)) static const char marker[] = "wine-portal-filedialog";
+/* wine-desktop-integration 이 "우리 파일" 인지 판별하는 표지 */
+__attribute__((used)) static const char marker[] = "wine-desktop-integration";
 
 static HMODULE g_orig;  /* system32\comdlg32.dll (Wine 원본) */
 
@@ -280,8 +280,9 @@ static BOOL portal_dialog(OPENFILENAMEW *ofn, BOOL save)
     dyn = alloc((16 + 2 * nstr) * sizeof(char *));
     if (!argv || !dyn) goto out;
 
-    hl = GetEnvironmentVariableW(L"WINE_PORTAL_FILEDIALOG_HELPER", helper, MAX_PATH);
-    argv[argc++] = own(dyn, &ndyn, utf8(hl && hl < MAX_PATH ? helper : L"wine-portal-filedialog", -1));
+    hl = GetEnvironmentVariableW(L"WINE_DESKTOP_INTEGRATION_HELPER", helper, MAX_PATH);
+    if (!hl || hl >= MAX_PATH) hl = GetEnvironmentVariableW(L"WINE_PORTAL_FILEDIALOG_HELPER", helper, MAX_PATH);  /* 옛 이름 */
+    argv[argc++] = own(dyn, &ndyn, utf8(hl && hl < MAX_PATH ? helper : L"wine-desktop-integration-helper", -1));
     argv[argc++] = save ? "--mode=save" : "--mode=open";
     argv[argc++] = own(dyn, &ndyn, kv("--out=", wine_get_unix_file_name(tmp)));
     if (ofn->lpstrTitle && *ofn->lpstrTitle) argv[argc++] = own(dyn, &ndyn, kv("--title=", utf8(ofn->lpstrTitle, -1)));
