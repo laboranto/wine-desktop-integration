@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 /* comdlg32 프록시: GetOpenFileNameW/GetSaveFileNameW 를 xdg-desktop-portal 헬퍼로 돌리고,
    처리할 수 없는 호출과 나머지 export 는 prefix 의 system32\comdlg32.dll(Wine 원본)로 넘긴다. */
 #define _COMDLG32_  /* 우리가 export 하므로 dllimport 아님 */

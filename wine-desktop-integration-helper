@@ -1,4 +1,5 @@
 #!/usr/bin/python3
+# SPDX-License-Identifier: LGPL-2.1-or-later
 """wine-desktop-integration 의 유닉스 쪽 헬퍼.
 
 파일 대화상자(comdlg32.dll): xdg-desktop-portal FileChooser 로 띄우고 결과를 --out 파일에 쓴다.

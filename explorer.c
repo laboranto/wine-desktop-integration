@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 /* explorer.exe 대역: 앱 폴더에 두면 그 앱의 "explorer /select,<경로>"(카톡 "폴더 열기")와 "explorer <폴더>" 를
    유닉스 파일 관리자(org.freedesktop.FileManager1)로 돌리고, 처리할 수 없는 인자는 prefix 의 원본 explorer.exe 로 넘긴다.
    ponytail: Wine 의 ShellExecute("explorer") 는 현재 폴더 → 시스템 경로 순으로 찾고 exe 폴더는 안 봄.

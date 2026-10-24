@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: LGPL-2.1-or-later
 # Wine 앱에 데스크톱 연동을 앱 단위로 깔고 관리한다.
 #  - comdlg32.dll: 파일 열기/저장 대화상자 → xdg-desktop-portal
 #  - explorer.exe: "explorer /select,<경로>" 와 "explorer <폴더>" → 유닉스 파일 관리자(FileManager1)

@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: LGPL-2.1-or-later
 # mingw 없이 clang + lld 로 빌드
 set -eu
 cd "$(dirname "$0")"
