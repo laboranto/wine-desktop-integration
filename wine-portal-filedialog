@@ -1,0 +1,112 @@
+#!/usr/bin/python3
+"""xdg-desktop-portal FileChooser 로 파일 대화상자를 띄우고 결과를 --out 파일에 쓴다.
+
+결과 파일(UTF-8): 1행 = 선택된 필터 번호(1부터, 모르면 0), 2행부터 경로 한 줄에 하나.
+종료코드: 0 = 선택, 10 = 취소, 그 외 = 오류(호출 측은 Wine 대화상자로 넘김).
+값 인자는 --key=값 형태로 받는다.
+"""
+import argparse
+import os
+import secrets
+import sys
+from urllib.parse import unquote_to_bytes, urlparse
+
+
+def main():
+    # 외부 모듈은 여기서 불러서 없을 때도 종료코드 2 로 끝나게
+    import dbus
+    from dbus.mainloop.glib import DBusGMainLoop
+    from gi.repository import GLib
+
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument('--mode', choices=('open', 'save'), required=True)
+    ap.add_argument('--out', required=True, help='결과 파일 경로')
+    ap.add_argument('--title')
+    ap.add_argument('--dir', help='초기 폴더')
+    ap.add_argument('--name', help='기본 파일명(save)')
+    ap.add_argument('--multiple', action='store_true')
+    ap.add_argument('--filter', action='append', default=[], metavar='NAME', help='반복 가능')
+    ap.add_argument('--filter-patterns', action='append', default=[], metavar='PATTERNS',
+                    help='--filter 와 같은 순서, ; 로 구분')
+    ap.add_argument('--filter-index', type=int, default=0, help='1부터')
+    a = ap.parse_args()
+    if len(a.filter) != len(a.filter_patterns):
+        ap.error('--filter 와 --filter-patterns 개수가 다름')
+    names = a.filter
+
+    DBusGMainLoop(set_as_default=True)
+    bus = dbus.SessionBus()
+    token = 'wpf' + secrets.token_hex(8)
+    sender = bus.get_unique_name()[1:].replace('.', '_')
+    expected = f'/org/freedesktop/portal/desktop/request/{sender}/{token}'
+
+    def globs(pats):  # Windows 의 *.* 는 확장자 없는 파일도 포함하므로 *
+        gs = [g.strip() for g in pats.split(';')]
+        return [('*' if g == '*.*' else g) for g in gs if g]
+
+    filters = [dbus.Struct((name, dbus.Array([dbus.Struct((dbus.UInt32(0), g), signature='us')
+                                              for g in globs(pats)], signature='(us)')),
+                           signature='sa(us)')
+               for name, pats in zip(names, a.filter_patterns)]
+    opts = dbus.Dictionary({'handle_token': dbus.String(token), 'modal': dbus.Boolean(True)}, signature='sv')
+    if filters:
+        opts['filters'] = dbus.Array(filters, signature='(sa(us))')
+        if 1 <= a.filter_index <= len(filters):
+            opts['current_filter'] = filters[a.filter_index - 1]
+    if a.dir:
+        opts['current_folder'] = dbus.Array(os.fsencode(a.dir) + b'\0', signature='y')
+    if a.mode == 'open':
+        opts['multiple'] = dbus.Boolean(a.multiple)
+    elif a.name:
+        opts['current_name'] = dbus.String(a.name)
+
+    loop = GLib.MainLoop()
+    result = {'code': 2}
+
+    def on_response(response, results):
+        try:
+            if response == 0:
+                paths = []
+                for u in results.get('uris', []):
+                    p = urlparse(str(u))
+                    if p.scheme != 'file':
+                        raise ValueError(f'file URI 아님: {u}')
+                    paths.append(unquote_to_bytes(p.path))
+                if not paths:
+                    raise ValueError('선택된 파일 없음')
+                idx = 0
+                cf = results.get('current_filter')
+                if cf is not None:
+                    idx = next((i + 1 for i, n in enumerate(names) if n == str(cf[0])), 0)
+                with open(a.out, 'wb') as f:  # 경로는 파일시스템 바이트 그대로
+                    f.write(f'{idx}\n'.encode() + b''.join(p + b'\n' for p in paths))
+                result['code'] = 0
+            elif response == 1:
+                result['code'] = 10
+            else:
+                print(f'포털 응답 코드 {response}', file=sys.stderr)
+        except Exception as e:
+            print(f'결과 처리 실패: {e}', file=sys.stderr)
+        loop.quit()
+
+    # 호출 전에 예상 경로로 구독해서 응답을 놓치지 않게
+    args = dict(signal_name='Response', dbus_interface='org.freedesktop.portal.Request')
+    bus.add_signal_receiver(on_response, path=expected, **args)
+    portal = dbus.Interface(bus.get_object('org.freedesktop.portal.Desktop', '/org/freedesktop/portal/desktop'),
+                            'org.freedesktop.portal.FileChooser')
+    method = portal.OpenFile if a.mode == 'open' else portal.SaveFile
+    title = a.title or ('Open' if a.mode == 'open' else 'Save As')
+    # ponytail: parent_window 를 비워 둠 → 포털 창이 앱 창에 붙지 않음. X11 이면 "x11:<XID>" 를 넘기면 됨
+    handle = method('', title, opts)
+    if str(handle) != expected:  # 옛 포털은 다른 경로를 돌려줌
+        bus.add_signal_receiver(on_response, path=str(handle), **args)
+    loop.run()
+    return result['code']
+
+
+if __name__ == '__main__':
+    try:
+        sys.exit(main())
+    except Exception as e:
+        print(f'wine-portal-filedialog: {e}', file=sys.stderr)
+        sys.exit(2)

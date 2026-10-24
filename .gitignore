@@ -1,0 +1,5 @@
+# 빌드 산출물
+comdlg32.dll
+*.exe
+*.pdb
+__pycache__/
